@@ -1,0 +1,104 @@
+<html>
+	<head>
+		<title>Kampfkuchens Radio</title>
+		<style>
+		    body {
+				background-color: black;
+				color: yellow;
+				font-family: Verdana, sans-serif;
+			}
+			
+			h1 {
+				color: inherit;
+				text-align: center;
+				text-decoration: none;
+				font-weight: bold;
+				font-size: 3em;
+			}
+			
+			td {
+				padding: 3px;
+				padding-right: 8px;
+			}
+			
+			.content {
+				width: 80%;
+				margin: 0 auto;
+				padding: 15px;
+				border-radius: 10px;
+				background-color: #656565;
+			}
+			
+			.wrap {
+				width: 100%;
+			}
+			
+			.player {
+				text-align: center;
+			}
+			
+			.info {
+				padding: 5px 0;
+			}
+			
+			.white{
+				color: #fff;
+			}
+		</style>
+		<script>
+		const pageTitle = 'Kampfkuchens Radio';
+		const streamUrl = 'http://kuchennet.selfhost.eu:8000/status-json.xsl';
+
+		async function fetchData() {
+			const apiUrl = streamUrl;
+
+			try {
+				const response = await fetch(apiUrl);
+
+				if (!response.ok) {
+					throw new Error(`HTTP error! status: ${response.status}`);
+				}
+
+				const data = await response.json();
+				const current = data.icestats.source.title;
+
+				updateTitle(current);
+			} catch (error) {
+				console.error('There was an error with the request:', error);
+			}
+		}
+		
+		function updateTitle(current) {
+			document.title = pageTitle + ': ' + current;
+			const titleSpan = document.querySelector('.current');
+			
+			if (titleSpan) {
+				titleSpan.textContent = current;
+			} else {
+				// ignore - keep for debug
+				//console.warn('No element with class "title" found.');
+			}
+		}
+		
+		setInterval(fetchData, 5000);
+		</script>
+	</head>
+	<body>
+		<h1>Kampfkuchens Radio</h1>
+		<div class="content">
+			<div class="wrap player">
+				<audio controls>
+					<source src="http://kuchennet.selfhost.eu:8000/stream" type="audio/mpeg">
+				</audio>
+			</div>
+			<div class="info">
+				<table>
+					<tr>
+						<td class="white">Currently Playing:</td>
+						<td class="current"/>
+					</tr>
+				</table>
+			</div>
+		</div>
+	</body>
+</html>
