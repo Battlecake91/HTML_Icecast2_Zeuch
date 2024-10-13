@@ -64,6 +64,10 @@
 				width: 50px;
 				background-color: #fff;
 			}
+			
+			.hidden {
+				display: none;
+			}
 		</style>
 		<script>
 			const host = 'http://kuchennet.selfhost.eu:8000/'
@@ -135,14 +139,20 @@
 			
 			// updates the song history
 			function updateHistory(current) {
+				// hide "no recent" text
+				if (history.length === 2) {
+					document.getElementById('noRecent').classList.add('hidden');
+				}
+
 				if (history.length == 0 || history[history.length - 1].title != current) {
 					var data = {title: current, time: currentTime()};
 					history.push(data);
 					
 					const table = document.getElementById('recent').getElementsByTagName('tbody')[0];
 
-					// Insert a new row at index 0 (the first position)
+					// Insert a new row at index 0 (hidden - will be displayed once the song is over)
 					const newRow = table.insertRow(0);
+					newRow.classList.add('hidden');
 
 					// Create new cells for the row
 					const pos = newRow.insertCell(0)
@@ -157,6 +167,12 @@
 
 					title.textContent = data.title;
 					title.classList.add('yellow');
+					
+					// unhide second row (previous song)
+					const secondRow = table.rows[1];
+					if(secondRow) {
+						secondRow.classList.remove('hidden');
+					}
 				}
 			}
 			
@@ -214,6 +230,7 @@
 			</div>
 			<div class="info">
 				<h2 class="yellow">Recently Played</h2>
+				<p id="noRecent">No Recent Tracks</p>
 				<table id="recent">
 					<tbody/>
 				</table>
