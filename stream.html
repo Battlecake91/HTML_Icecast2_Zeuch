@@ -2,12 +2,12 @@
 	<head>
 		<title>Kampfkuchens Radio</title>
 		<style>
-		    body {
+			body {
 				background-color: black;
 				color: white;
 				font-family: Verdana, sans-serif;
 			}
-			
+
 			h1 {
 				color: inherit;
 				text-align: center;
@@ -15,12 +15,12 @@
 				font-weight: bold;
 				font-size: 3em;
 			}
-			
+
 			td {
 				padding: 3px;
 				padding-right: 8px;
 			}
-			
+
 			.content {
 				width: 70%;
 				min-width: 1000px;
@@ -29,28 +29,28 @@
 				border-radius: 10px;
 				background-color: #656565;
 			}
-			
+
 			.player {
 				width: 100%;
-				padding: 15px;
+				padding: 15px 0;
 			}
-			
+
 			.info {
 				padding: 5px 0;
 			}
-			
+
 			.yellow {
 				color: yellow;
 			}
-			
+
 			.right {
 				text-align: right;
 			}
-			
+
 			.center {
 				margin: 0 auto;
 			}
-			
+
 			.play-symbol {
 				width: 0;
 				height: 0;
@@ -58,13 +58,24 @@
 				border-left: 50px solid #fff;
 				border-bottom: 25px solid transparent;
 			}
-			
+
 			.stop-symbol {
 				height: 50px;
 				width: 50px;
 				background-color: #fff;
 			}
-			
+
+			.volume {
+				width: 35%;
+				padding: 10px;
+				margin: 0 auto;
+			}
+
+			.slider {
+				width: 100%;
+				cursor: pointer;
+			}
+
 			.hidden {
 				display: none;
 			}
@@ -72,30 +83,51 @@
 		<script>
 			const host = 'http://kuchennet.selfhost.eu:8000/'
 			const statsUrl = host + 'status-json.xsl';
-			const streamUrl = host * "stream";
+			const streamUrl = host + "stream";
 
 			var refreshTime = 5000; // ms
 			var server_name = null;
 			var data = null;
 			let history = new Array();
-			
+
+			var updater  = null;
+
 			// toggles play via div buttons
 			function togglePlay() {
 				const wrap = document.getElementById('wrapplayer');
-			
+
 				if(isPlaying()) {
 					getPlayer().pause();
-					
+
+					// toggle buttons
 					wrap.classList.remove('stop-symbol');
 					wrap.classList.add('play-symbol');
+
+					// stop fetching data
+					clearInterval(updater);
+
 					return;
 				}
-				
-				getPlayer().load();
-				getPlayer().play();
-				
-				wrap.classList.remove('play-symbol');
-				wrap.classList.add('stop-symbol');
+
+				try {
+					// (re)set stream sopurce url
+					document.getElementById('audioSource').setAttribute('src', streamUrl);
+
+					getPlayer().load(); // reload stream
+					getPlayer().play(); // start playback
+
+					// toggle buttons
+					wrap.classList.remove('play-symbol');
+					wrap.classList.add('stop-symbol');
+
+					fetchData();
+
+					// fetch data every ... ms
+					updater = setInterval(fetchData, refreshTime);
+
+				} catch(error) {
+					console.error('There was an error with the playback:', error);
+				}
 			}
 
 			// get server and song data from api
@@ -117,28 +149,29 @@
 
 					updateTitle(current);
 					updateHistory(current);
+
 				} catch (error) {
 					console.error('There was an error with the request:', error);
 				}
 			}
-			
+
 			// updates current song and page title
 			function updateTitle(current) {
 				// update page title
 				document.title = server_name + ': ' + current;
-				
+
 				// update current song
 				const currentTitle = document.querySelector('.current');
-				if (currentTitle) {
-					currentTitle.textContent = current;
-				} else {
-					// ignore - keep for debug
-					//console.warn('No element with class "title" found.');
-				}
+				currentTitle.textContent = current;
 			}
-			
+
 			// updates the song history
 			function updateHistory(current) {
+				// no playback -> no history
+				if(!isPlaying()) {
+					return;
+				}
+
 				// hide "no recent" text
 				if (history.length === 2) {
 					document.getElementById('noRecent').classList.add('hidden');
@@ -147,7 +180,7 @@
 				if (history.length == 0 || history[history.length - 1].title != current) {
 					var data = {title: current, time: currentTime()};
 					history.push(data);
-					
+
 					const table = document.getElementById('recent').getElementsByTagName('tbody')[0];
 
 					// Insert a new row at index 0 (hidden - will be displayed once the song is over)
@@ -167,7 +200,7 @@
 
 					title.textContent = data.title;
 					title.classList.add('yellow');
-					
+
 					// unhide second row (previous song)
 					const secondRow = table.rows[1];
 					if(secondRow) {
@@ -175,39 +208,45 @@
 					}
 				}
 			}
-			
+
 			// get current time (format: HH:MM)
 			function currentTime() {
 				const now = new Date();
 				const options = { hour: '2-digit', minute: '2-digit', hour12: false };
 				return now.toLocaleTimeString('de-DE', options);
 			}
-			
+
 			// auto start player
 			function playAudio() {
 				getPlayer().play().catch(error => {
 					console.error('Playback failed:', error);
 				});
 			}
-			
+
 			// check if player is playing
 			function isPlaying() {
 				return !getPlayer().paused;
 			}
-			
+
 			// get player instance
 			function getPlayer() {
 				return document.getElementById('player');
 			}
+
+			// adjust volume according to slider
+			function setVolume(e) {
+				getPlayer().volume = this.value / 100;
+			}
+
+			window.addEventListener('load', () => {
+				// add volume handler
+				document.getElementById("volumeSlider").addEventListener("input", setVolume);
 			
-			// start playback right away (does not work yet)
-			window.addEventListener('load', () => {togglePlay()});
-			
-			// feth data once (no delay for current song)
-			fetchData();
-			
-			// call fetch method every ... ms
-			setInterval(fetchData, refreshTime);
+				// start playback right away (does not work yet)
+				//const wrap = document.getElementById('wrapplayer');
+				//wrap.click();
+				//togglePlay();
+			});
 		</script>
 	</head>
 	<body>
@@ -215,16 +254,20 @@
 		<div class="content">
 			<div class="player">
 				<div id="wrapplayer" class="play-symbol center" onclick="togglePlay()">
-					<audio id="player" controls autoplay hidden>
-						<source src="http://kuchennet.selfhost.eu:8000/stream" type="audio/mpeg">
+					<audio id="player" controls hidden>
+						<source id="audioSource" src="" type="audio/mpeg">
 					</audio>
+				</div>
+				<div class="volume">
+					<label for="volumeSlider">Volume</label>
+					<input type="range" min="1" max="100" value="50" class="slider yellow" id="volumeSlider" name="volumeSlider">
 				</div>
 			</div>
 			<div class="info">
 				<table>
 					<tr>
 						<td>Currently Playing:</td>
-						<td class="yellow current"/>
+						<td class="yellow current">-</td>
 					</tr>
 				</table>
 			</div>
