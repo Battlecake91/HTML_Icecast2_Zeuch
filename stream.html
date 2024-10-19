@@ -2,12 +2,12 @@
 	<head>
 		<title>Kampfkuchens Radio</title>
 		<style>
-		    body {
+			body {
 				background-color: black;
-				color: yellow;
+				color: white;
 				font-family: Verdana, sans-serif;
 			}
-			
+
 			h1 {
 				color: inherit;
 				text-align: center;
@@ -15,88 +15,309 @@
 				font-weight: bold;
 				font-size: 3em;
 			}
-			
+
 			td {
 				padding: 3px;
 				padding-right: 8px;
 			}
-			
+
 			.content {
-				width: 80%;
+				width: 70%;
+				min-width: 1000px;
 				margin: 0 auto;
 				padding: 15px;
 				border-radius: 10px;
 				background-color: #656565;
 			}
-			
-			.wrap {
-				width: 100%;
-			}
-			
+
 			.player {
-				text-align: center;
+				width: 100%;
+				padding: 15px 0;
 			}
-			
+
 			.info {
 				padding: 5px 0;
 			}
-			
-			.white{
-				color: #fff;
+
+			.yellow {
+				color: yellow;
+			}
+
+			.right {
+				text-align: right;
+			}
+
+			.center {
+				margin: 0 auto;
+			}
+
+			.play-symbol {
+				width: 0;
+				height: 0;
+				border-top: 25px solid transparent;
+				border-left: 50px solid #fff;
+				border-bottom: 25px solid transparent;
+			}
+
+			.stop-symbol {
+				height: 50px;
+				width: 50px;
+				background-color: #fff;
+			}
+
+			.volume {
+				width: 35%;
+				padding: 10px;
+				margin: 0 auto;
+			}
+
+			.slider {
+				width: 100%;
+				cursor: pointer;
+			}
+
+			.hidden {
+				display: none;
 			}
 		</style>
 		<script>
-		const pageTitle = 'Kampfkuchens Radio';
-		const streamUrl = 'http://kuchennet.selfhost.eu:8000/status-json.xsl';
+			const host = 'http://kuchennet.selfhost.eu:8000/'
+			const statsUrl = host + 'status-json.xsl';
+			const streamUrl = host + "stream";
 
-		async function fetchData() {
-			const apiUrl = streamUrl;
+			const refreshTime = 5000; // ms
+			var server_name = null;
+			var data = null;
+			var trackHistory = new Array();
 
-			try {
-				const response = await fetch(apiUrl);
+			var updater  = null;
+			var playTime = 0;
 
-				if (!response.ok) {
-					throw new Error(`HTTP error! status: ${response.status}`);
+			// toggles play via div buttons
+			function togglePlay() {
+				const wrap = document.getElementById('wrapplayer');
+
+				if(isPlaying()) {
+					getPlayer().pause();
+
+					// toggle buttons
+					wrap.classList.remove('stop-symbol');
+					wrap.classList.add('play-symbol');
+
+					// stop fetching data
+					clearInterval(updater);
+					
+					// set page title
+					updateTitle(server_name);
+
+					return;
 				}
 
-				const data = await response.json();
-				const current = data.icestats.source.title;
+				try {
+					// (re)set stream sopurce url
+					document.getElementById('audioSource').setAttribute('src', streamUrl);
 
-				updateTitle(current);
-			} catch (error) {
-				console.error('There was an error with the request:', error);
+					getPlayer().load(); // reload stream
+					getPlayer().play(); // start playback
+
+					// toggle buttons
+					wrap.classList.remove('play-symbol');
+					wrap.classList.add('stop-symbol');
+
+					fetchData();
+
+					// fetch data every ... ms
+					updater = setInterval(fetchData, refreshTime);
+
+				} catch(error) {
+					console.error('There was an error with the playback:', error);
+				}
 			}
-		}
-		
-		function updateTitle(current) {
-			document.title = pageTitle + ': ' + current;
-			const titleSpan = document.querySelector('.current');
+
+			// get server and song data from api
+			async function fetchData() {
+				try {
+					const response = await fetch(statsUrl);
+
+					if (!response.ok) {
+						throw new Error(`HTTP error! status: ${response.status}`);
+					}
+
+					// expecting icecast 2 response
+					const data = await response.json();
+					const current = data.icestats.source.title;
+
+					if(server_name == null) {
+						// do this only once - server name does never change
+						server_name = data.icestats.source.server_name;
+					}
+
+					// update history and title
+					updateTitle(current);
+					updateHistory(current);
+
+				} catch (error) {
+					console.error('There was an error with the request:', error);
+				}
+			}
+
+			// updates current song and page title
+			function updateTitle(current) {
+				// update page title
+				document.title = current;
+
+				// update current song
+				document.querySelector('.current').textContent = current;
+			}
+
+			// updates the song history
+			function updateHistory(current) {
+				// no playback -> no history updates
+				if(!isPlaying()) {
+					return;
+				}
+
+				// add first track or new track
+				if (trackHistory.length == 0 || trackHistory[trackHistory.length - 1].title != current) {
+					// add new trackhistory element
+					var data = {title: current, time: currentTime()};
+					trackHistory.push(data);
+
+					const table = document.getElementById('recent').getElementsByTagName('tbody')[0];
+
+					// Insert a new row at index 0 (hidden - will be displayed once the song is over)
+					const newRow = table.insertRow(0);
+					newRow.classList.add('hidden');
+
+					// Create new cells for the row
+					const pos = newRow.insertCell(0)
+					const time = newRow.insertCell(1);
+					const title = newRow.insertCell(2);
+
+					// Set the content of the new cells
+					pos.textContent = trackHistory.length
+					pos.classList.add('right');
+
+					// Set current time
+					time.textContent = data.time;
+
+					// Set current title
+					title.textContent = data.title;
+					title.classList.add('yellow');
+
+					// unhide second row (previous song)
+					const secondRow = table.rows[1];
+					if(secondRow) {
+						secondRow.classList.remove('hidden');
+					}
+				}
+				
+				// hide "no recent" text once a second song got added
+				if (trackHistory.length === 2) {
+					document.getElementById('noRecent').classList.add('hidden');
+				}
+			}
+
+			// get current time (format: HH:MM)
+			function currentTime() {
+				const now = new Date();
+				const options = { hour: '2-digit', minute: '2-digit', hour12: false };
+
+				return now.toLocaleTimeString('de-DE', options);
+			}
 			
-			if (titleSpan) {
-				titleSpan.textContent = current;
-			} else {
-				// ignore - keep for debug
-				//console.warn('No element with class "title" found.');
+			// upadte platimer
+			function playTimer() {
+				// update only if playback is active
+				if(isPlaying()) {
+					playTime++;
+				}
+				
+				// seconds & minutees
+				var seconds = playTime % 60;
+				var minutes = (playTime - seconds) / 60;
+				
+				// fix missing leading zero
+				if(seconds < 10) {
+					seconds = '0' + seconds;
+				}
+				if(minutes < 10) {
+					minutes = '0' + minutes;
+				}
+				
+				// update timer
+				document.querySelector('.time').textContent = minutes + ':' + seconds;
 			}
-		}
-		
-		setInterval(fetchData, 5000);
+
+			// auto start player
+			function playAudio() {
+				getPlayer().play().catch(error => {
+					console.error('Playback failed:', error);
+				});
+			}
+
+			// check if player is playing
+			function isPlaying() {
+				return !getPlayer().paused;
+			}
+
+			// get player instance
+			function getPlayer() {
+				return document.getElementById('player');
+			}
+
+			// adjust volume according to slider
+			function setVolume(e) {
+				document.getElementById('volSet').textContent = this.value;
+				getPlayer().volume = this.value / 100;
+			}
+
+			// execute these once the site is done loading
+			window.addEventListener('load', () => {
+				// add volume handler
+				document.getElementById("volumeSlider").addEventListener("input", setVolume);
+				
+				// start playtime updateer (every second)
+				setInterval(playTimer, 1000);
+			
+				// start playback right away (does not work yet)
+				//const wrap = document.getElementById('wrapplayer');
+				//wrap.click();
+				//togglePlay();
+			});
 		</script>
 	</head>
 	<body>
-		<h1>Kampfkuchens Radio</h1>
+		<h1 class="yellow">Kampfkuchens Radio</h1>
 		<div class="content">
-			<div class="wrap player">
-				<audio controls>
-					<source src="http://kuchennet.selfhost.eu:8000/stream" type="audio/mpeg">
-				</audio>
+			<div class="player">
+				<div id="wrapplayer" class="play-symbol center" onclick="togglePlay()">
+					<audio id="player" controls hidden>
+						<source id="audioSource" src="" type="audio/mpeg">
+					</audio>
+				</div>
+				<div class="volume">
+					<label for="volumeSlider">Volume: <span class="yellow" id="volSet">50</span></label>
+					<input type="range" min="1" max="100" value="50" class="slider yellow" id="volumeSlider" name="volumeSlider">
+				</div>
 			</div>
 			<div class="info">
 				<table>
 					<tr>
-						<td class="white">Currently Playing:</td>
-						<td class="current"/>
+						<td class="right">Currently Playing:</td>
+						<td class="yellow current">-</td>
 					</tr>
+					<tr>
+						<td class="right">Playtime:</td>
+						<td class="yellow time">-</td>
+					</tr>
+				</table>
+			</div>
+			<div class="info">
+				<h2 class="yellow">Recently Played</h2>
+				<p id="noRecent">No Recent Tracks</p>
+				<table id="recent">
+					<tbody/>
 				</table>
 			</div>
 		</div>
