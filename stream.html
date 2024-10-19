@@ -85,12 +85,13 @@
 			const statsUrl = host + 'status-json.xsl';
 			const streamUrl = host + "stream";
 
-			var refreshTime = 5000; // ms
+			const refreshTime = 5000; // ms
 			var server_name = null;
 			var data = null;
-			let history = new Array();
+			var trackHistory = new Array();
 
 			var updater  = null;
+			var playTime = 0;
 
 			// toggles play via div buttons
 			function togglePlay() {
@@ -105,6 +106,9 @@
 
 					// stop fetching data
 					clearInterval(updater);
+					
+					// set page title
+					updateTitle(server_name);
 
 					return;
 				}
@@ -139,6 +143,7 @@
 						throw new Error(`HTTP error! status: ${response.status}`);
 					}
 
+					// expecting icecast 2 response
 					const data = await response.json();
 					const current = data.icestats.source.title;
 
@@ -147,6 +152,7 @@
 						server_name = data.icestats.source.server_name;
 					}
 
+					// update history and title
 					updateTitle(current);
 					updateHistory(current);
 
@@ -158,28 +164,24 @@
 			// updates current song and page title
 			function updateTitle(current) {
 				// update page title
-				document.title = server_name + ': ' + current;
+				document.title = current;
 
 				// update current song
-				const currentTitle = document.querySelector('.current');
-				currentTitle.textContent = current;
+				document.querySelector('.current').textContent = current;
 			}
 
 			// updates the song history
 			function updateHistory(current) {
-				// no playback -> no history
+				// no playback -> no history updates
 				if(!isPlaying()) {
 					return;
 				}
 
-				// hide "no recent" text
-				if (history.length === 2) {
-					document.getElementById('noRecent').classList.add('hidden');
-				}
-
-				if (history.length == 0 || history[history.length - 1].title != current) {
+				// add first track or new track
+				if (trackHistory.length == 0 || trackHistory[trackHistory.length - 1].title != current) {
+					// add new trackhistory element
 					var data = {title: current, time: currentTime()};
-					history.push(data);
+					trackHistory.push(data);
 
 					const table = document.getElementById('recent').getElementsByTagName('tbody')[0];
 
@@ -193,11 +195,13 @@
 					const title = newRow.insertCell(2);
 
 					// Set the content of the new cells
-					pos.textContent = history.length
+					pos.textContent = trackHistory.length
 					pos.classList.add('right');
 
+					// Set current time
 					time.textContent = data.time;
 
+					// Set current title
 					title.textContent = data.title;
 					title.classList.add('yellow');
 
@@ -207,13 +211,42 @@
 						secondRow.classList.remove('hidden');
 					}
 				}
+				
+				// hide "no recent" text once a second song got added
+				if (trackHistory.length === 2) {
+					document.getElementById('noRecent').classList.add('hidden');
+				}
 			}
 
 			// get current time (format: HH:MM)
 			function currentTime() {
 				const now = new Date();
 				const options = { hour: '2-digit', minute: '2-digit', hour12: false };
+
 				return now.toLocaleTimeString('de-DE', options);
+			}
+			
+			// upadte platimer
+			function playTimer() {
+				// update only if playback is active
+				if(isPlaying()) {
+					playTime++;
+				}
+				
+				// seconds & minutees
+				var seconds = playTime % 60;
+				var minutes = (playTime - seconds) / 60;
+				
+				// fix missing leading zero
+				if(seconds < 10) {
+					seconds = '0' + seconds;
+				}
+				if(minutes < 10) {
+					minutes = '0' + minutes;
+				}
+				
+				// update timer
+				document.querySelector('.time').textContent = minutes + ':' + seconds;
 			}
 
 			// auto start player
@@ -235,12 +268,17 @@
 
 			// adjust volume according to slider
 			function setVolume(e) {
+				document.getElementById('volSet').textContent = this.value;
 				getPlayer().volume = this.value / 100;
 			}
 
+			// execute these once the site is done loading
 			window.addEventListener('load', () => {
 				// add volume handler
 				document.getElementById("volumeSlider").addEventListener("input", setVolume);
+				
+				// start playtime updateer (every second)
+				setInterval(playTimer, 1000);
 			
 				// start playback right away (does not work yet)
 				//const wrap = document.getElementById('wrapplayer');
@@ -259,15 +297,19 @@
 					</audio>
 				</div>
 				<div class="volume">
-					<label for="volumeSlider">Volume</label>
+					<label for="volumeSlider">Volume: <span class="yellow" id="volSet">50</span></label>
 					<input type="range" min="1" max="100" value="50" class="slider yellow" id="volumeSlider" name="volumeSlider">
 				</div>
 			</div>
 			<div class="info">
 				<table>
 					<tr>
-						<td>Currently Playing:</td>
+						<td class="right">Currently Playing:</td>
 						<td class="yellow current">-</td>
+					</tr>
+					<tr>
+						<td class="right">Playtime:</td>
+						<td class="yellow time">-</td>
 					</tr>
 				</table>
 			</div>
